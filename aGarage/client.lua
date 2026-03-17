@@ -52,18 +52,38 @@ function OpenGarageMenu()
 
     ESX.TriggerServerCallback('garage:getVehicles', function(vehicles)
 
+local cachedVehicles = {}
+
+for k,v in pairs(vehicles) do
+    local props = json.decode(v.vehicle)
+    local name = GetLabelText(GetDisplayNameFromVehicleModel(props.model))
+
+    table.insert(cachedVehicles, {
+        data = v,
+        name = name,
+        plate = v.plate,
+        stored = v.stored
+    })
+end
+
         RageUI.Visible(GarageMenu, true)
 
         CreateThread(function()
             while open do
-                Wait(0)
+                local wait = 500
+
+                if RageUI.Visible(GarageMenu) or RageUI.Visible(ConfirmMenu) then
+                    wait = 1
+                end
+
+                Wait(wait)
 
                 RageUI.IsVisible(GarageMenu, function()
                     if #vehicles == 0 then
                         RageUI.Separator("")RageUI.Separator(AnimatedArrow().."Garage vide")RageUI.Separator("")
                     end
                     local availableVehicles = 0
-                    for k,v in pairs(vehicles) do
+                    for k,v in pairs(cachedVehicles) do
                         if v.stored == 1 then
                             availableVehicles = availableVehicles + 1
                         end
@@ -71,27 +91,23 @@ function OpenGarageMenu()
 
                     RageUI.Separator(AnimatedArrow().."→ ~s~ véhicule disponible (~g~ "..availableVehicles.."~s~ )")
                 
-                    for k,v in pairs(vehicles) do
+                    for k,v in pairs(cachedVehicles) do
                         local stored = v.stored == 1
-                        local props = json.decode(v.vehicle)
-                        local vehicleName = GetLabelText(GetDisplayNameFromVehicleModel(props.model))
+                        local vehicleName = v.name
                         local plate = v.plate
-
                         vehicleName = vehicleName.."~s~ [~o~"..plate.."~s~]"
-
                         if v.stored == 0 then
                             vehicleName = "~r~"..vehicleName
                         end
 
-                        
                         RageUI.Button(AnimatedArrow().."→ ~s~"..vehicleName,stored and "Voir le véhicule" or "~r~Véhicule déjà sorti",{},stored,{
                             onSelected = function()
-                                selectedVehicleData = v
-                                    if previewVehicle and DoesEntityExist(previewVehicle) then
-                                        DeleteEntity(previewVehicle)
-                                        previewVehicle = nil
-                                    end
-                                PreviewVehicle(v)
+                                selectedVehicleData = v.data
+                                if previewVehicle and DoesEntityExist(previewVehicle) then
+                                    DeleteEntity(previewVehicle)
+                                    previewVehicle = nil
+                                end
+                                PreviewVehicle(v.data)
                             end
                         },stored and ConfirmMenu or nil)
                     end
@@ -99,9 +115,7 @@ function OpenGarageMenu()
                 end)
 
                 RageUI.IsVisible(ConfirmMenu, function()
-
                     if previewVehicle then
-
                         RageUI.Button(AnimatedArrow().."→ ~s~Sortir le véhicule", nil, {}, true, {
                             onSelected = function()
 
@@ -208,35 +222,21 @@ function StoreVehicle()
             ESX.ShowNotification("~r~Ce véhicule ne vous appartient pas")
         end
     end, props.plate)
-
 end
 
 function PreviewVehicle(data)
-
     local props = json.decode(data.vehicle)
-
     if previewVehicle and DoesEntityExist(previewVehicle) then
         DeleteEntity(previewVehicle)
         previewVehicle = nil
     end
 
     local model = props.model
-
     RequestModel(model)
     while not HasModelLoaded(model) do
         Wait(0)
     end
-
-    previewVehicle = CreateVehicle(
-        model,
-        currentGarage.previewPos.x,
-        currentGarage.previewPos.y,
-        currentGarage.previewPos.z,
-        currentGarage.previewPos.w,
-        false,
-        true
-    )
-
+    previewVehicle = CreateVehicle(model,currentGarage.previewPos.x,currentGarage.previewPos.y,currentGarage.previewPos.z,currentGarage.previewPos.w,false,true)
     SetEntityAsMissionEntity(previewVehicle, true, true)
     SetEntityAlpha(previewVehicle, 180, false)
     ESX.Game.SetVehicleProperties(previewVehicle, props)
@@ -250,7 +250,6 @@ end
 
 function CreatePreviewCam(vehicle)
     local coords = GetEntityCoords(vehicle)
-
     previewCam = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
     SetCamCoord(previewCam, coords.x + 3.0, coords.y + 3.0, coords.z + 1.5)
     PointCamAtEntity(previewCam, vehicle)
@@ -265,6 +264,7 @@ function DeletePreviewCam()
         previewCam = nil
     end
 end
+
 CreateThread(function()
     while true do
         local wait = 750
@@ -299,7 +299,6 @@ CreateThread(function()
             end
         end
         local pound = Config.Pound
-
         if #(pCoords - pound.menuPos) < 10.0 then
             wait = 0
             DrawMarker(22,pound.menuPos.x, pound.menuPos.y, pound.menuPos.z - 1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.7,0.7,0.7,255,140,0,150,true,true,2,false,nil,nil,false)
@@ -310,7 +309,6 @@ CreateThread(function()
                 end
             end
         end
-
         Wait(wait)
     end
 end)
@@ -318,34 +316,12 @@ end)
 
 RegisterNetEvent("aGarage:spawnPoundVehicle")
 AddEventHandler("aGarage:spawnPoundVehicle", function(plate)
-
     ESX.TriggerServerCallback('aGarage:getVehicleProps', function(props)
-
         local spawn = Config.Pound.spawnPos
-
         ESX.Game.SpawnVehicle(props.model, vector3(spawn.x, spawn.y, spawn.z), spawn.w, function(vehicle)
-
             ESX.Game.SetVehicleProperties(vehicle, props)
             TaskWarpPedIntoVehicle(PlayerPedId(), vehicle, -1)
 
         end)
-
     end, plate)
-
-end)
-
-Citizen.CreateThread(function()
-      Citizen.Wait(1000)
-    for _,v in pairs(Config.BlipsMap) do
-        local blipMap = AddBlipForCoord(v.pos)
-        SetBlipSprite(blipMap, v.id)
-        SetBlipDisplay(blipMap, 4)
-        SetBlipScale(blipMap, 0.7)
-        SetBlipColour(blipMap, v.color)
-        SetBlipAsShortRange(blipMap, true)
-        BeginTextCommandSetBlipName("STRING")
-        AddTextComponentSubstringPlayerName(v.name)
-        EndTextCommandSetBlipName(blipMap)
-        SetBlipPriority(blipMap, 5)
-    end
 end)
