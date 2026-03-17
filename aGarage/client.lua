@@ -58,12 +58,7 @@ for k,v in pairs(vehicles) do
     local props = json.decode(v.vehicle)
     local name = GetLabelText(GetDisplayNameFromVehicleModel(props.model))
 
-    table.insert(cachedVehicles, {
-        data = v,
-        name = name,
-        plate = v.plate,
-        stored = v.stored
-    })
+    table.insert(cachedVehicles, {data = v,name = name,plate = v.plate,stored = v.stored})
 end
 
         RageUI.Visible(GarageMenu, true)
